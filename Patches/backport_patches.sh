@@ -10,6 +10,7 @@ patch_files=(
     kernel/trace/trace_kprobe.c
     mm/maccess.c
     include/linux/seccomp.h
+    arch/arm64/include/asm/seccomp.h
 )
 
 PATCH_DATE="2025-11-14"
@@ -135,6 +136,31 @@ for i in "${patch_files[@]}"; do
 
         echo "======================================"
         ;;
+
+    # arch/arm64 changes
+    ## arch/arm64/include/asm/seccomp.h
+    arch/arm64/include/asm/seccomp.h)
+        echo "======================================"
+
+        if grep -qs "SECCOMP_ARCH" drivers/kernelsu/seccomp_cache.c; then
+            if grep -q "SECCOMP_ARCH" arch/arm64/include/asm/seccomp.h; then
+                echo "[-] arch/arm64/include/asm/seccomp.h already patched, Skipped."
+            else
+                sed -i '/#endif \/\* _ASM_SECCOMP_H \*\//i\#define SECCOMP_ARCH_NATIVE\t\tAUDIT_ARCH_AARCH64\n#define SECCOMP_ARCH_NATIVE_NR\t\tNR_syscalls\n#define SECCOMP_ARCH_NATIVE_NAME\t"aarch64"\n#ifdef CONFIG_COMPAT\n# define SECCOMP_ARCH_COMPAT\t\tAUDIT_ARCH_ARM\n# define SECCOMP_ARCH_COMPAT_NR\t__NR_compat_syscalls\n# define SECCOMP_ARCH_COMPAT_NAME\t"arm"\n#endif\n' arch/arm64/include/asm/seccomp.h
+
+                if grep -q "SECCOMP_ARCH_NATIVE" arch/arm64/include/asm/seccomp.h; then
+                    echo "[+] arch/arm64/include/asm/seccomp.h Patched!"
+                    echo "[+] Count: $(grep -c "SECCOMP_ARCH_" arch/arm64/include/asm/seccomp.h)"
+                else
+                    echo "[-] arch/arm64/include/asm/seccomp.h patch failed."
+                fi
+            fi
+        else
+            echo "[-] KernelSU seccomp arch tracking not detected, Skipped."
+        fi
+
+        echo "======================================"
+        ;;   
     esac
 
 done
