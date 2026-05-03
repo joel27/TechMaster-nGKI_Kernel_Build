@@ -93,45 +93,59 @@ jobs:
       - name: 🔗 Patch for no-kprobe
         uses: ./.github/workflows/patch-no-kprobe
 
-      - name: 🪛 Extra Kernel Options
+            - name: 🪛 Extra Kernel Options
         run: |
+          set -e
           cd $GITHUB_WORKSPACE/device_kernel
-          
-          # 1. 移动源码（你已经成功了，保留这部分）
+
+          # 1. 移动 KernelSU 源码
           if [ -d "KernelSU" ]; then
-            echo "Moving KernelSU from root to drivers/kernelsu"
             rm -rf drivers/kernelsu
             mv KernelSU/kernel drivers/kernelsu
+            rm -rf KernelSU
           elif [ -d "kernelsu" ]; then
-            echo "Moving kernelsu from root to drivers/kernelsu"
             rm -rf drivers/kernelsu
             mv kernelsu/kernel drivers/kernelsu
+            rm -rf kernelsu
           fi
 
-          # 2. 强制在 drivers/Makefile 中硬编码包含
-          # 这一行确保编译器必须进入该文件夹
-          sed -i '/obj-y += drivers\//i obj-y += kernelsu/' drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
+          # 2. 注入配置到 defconfig
+          DEFCONFIG="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           
-          # 3. 核心修复：直接把 Makefile 里的条件变量换成强制编译
-          # 这一步非常关键！它把 'obj-$(CONFIG_KSU)' 变成 'obj-y'
-          if [ -d "drivers/kernelsu" ]; then
-            echo "Force modifying drivers/kernelsu/Makefile..."
-            find drivers/kernelsu -name "Makefile" -exec sed -i 's/obj-\$(CONFIG_KSU)/obj-y/g' {} +
-            find drivers/kernelsu -name "Makefile" -exec sed -i 's/obj-\$(CONFIG_KSU_SUSFS)/obj-y/g' {} +
-            # 针对 SukiSU 特有的变量也强制打开
-            find drivers/kernelsu -name "Makefile" -exec sed -i 's/obj-\$(CONFIG_SUKISU)/obj-y/g' {} +
-          fi
+          # 先清掉可能重复的配置
+          sed -i '/^CONFIG_KSU/d' "$DEFCONFIG"
+          sed -i '/^CONFIG_SUSFS/d' "$DEFCONFIG"
+          sed -i '/^CONFIG_JUMP_LABEL/d' "$DEFCONFIG"
+          sed -i '/^CONFIG_LOCALVERSION_AUTO/d' "$DEFCONFIG"
+          sed -i '/^CONFIG_SUKISU/d' "$DEFCONFIG"
+          
+          # 写入必需配置
+          cat >> "$DEFCONFIG" << 'EOF'
+          CONFIG_KSU=y
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_HOOK_RC=y
+          CONFIG_KSU_HOOK_INPUT=y
+          CONFIG_KSU_HOOK_PROCESS=y
+          CONFIG_KSU_HOOK_SCHED=y
+          CONFIG_SUSFS=y
+          CONFIG_SUSFS_HOOK_RC=y
+          CONFIG_SUSFS_HOOK_INPUT=y
+          CONFIG_JUMP_LABEL=y
+          CONFIG_LOCALVERSION_AUTO=n
+          CONFIG_SUKISU=y
+          EOF
 
-          # 4. 注入必要的内核宏到 defconfig
-          # 修复 __jump_table 报错（ksu_is_..._enabled 相关的错误）
-          echo "CONFIG_KSU=y" >> arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          echo "CONFIG_SUSFS=y" >> arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          echo "CONFIG_JUMP_LABEL=y" >> arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          # 强制关闭可能会导致冲突的选项
-          sed -i 's/CONFIG_LOCALVERSION_AUTO=y/CONFIG_LOCALVERSION_AUTO=n/g' arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+          # 3. 重新生成 .config 使配置真正生效
+          mkdir -p out
+          make ARCH=arm64 O=out ${{ env.DEFCONFIG_NAME }}
+          make ARCH=arm64 O=out olddefconfig
 
-          # 5. 验证文件是否存在（如果这一步报错，说明 setup.sh 下载的文件目录结构变了）
-          ls -l drivers/kernelsu/
+          # 4. 确保 drivers/Makefile 包含 kernelsu 子目录
+          grep -q "kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
+
+          # 5. 验证配置是否生效
+          echo "=== 最终 .config 中的 KSU 配置 ==="
+          grep -E "CONFIG_KSU|CONFIG_SUSFS|CONFIG_JUMP_LABEL" out/.config
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
 
