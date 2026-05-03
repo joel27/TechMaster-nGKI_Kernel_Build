@@ -38,7 +38,7 @@ env:
   KERNELSU_NAME : "KernelSU"
   
   KERNELSU_AUTO_GET : "true"
-  KERNELSU_AUTO_FORK : "sukisu" # 根据您的配置需求选择
+  KERNELSU_AUTO_FORK : "sukisu" 
   KERNELSU_METHOD: "shell" 
 
   SUSFS_ENABLE : true
@@ -65,7 +65,7 @@ env:
   NEED_SAFE_DTBO : false
   REKERNEL_ENABLE: "false"
   HOOK_METHOD: "syscall"
-  KERNEL_PATCH: "true"
+  KERNEL_PATCH: "true" # 开启此项以修复 4.19 内核底层函数导出
   KPM_ENABLE: "false"
   KPM_INLINE: "false"
   HIDE_STUFF: "false"
@@ -95,9 +95,26 @@ jobs:
 
       - name: 🪛 Extra Kernel Options
         run: |
-          # 如果内核有特殊的配置要求，在此处添加
           cd $GITHUB_WORKSPACE/device_kernel
-          # 示例：sed -i 's/CONFIG_LOCALVERSION_AUTO=y/CONFIG_LOCALVERSION_AUTO=n/g' arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+          
+          # 修复 SukiSU 路径映射：将根目录的 kernelsu 软链接到 drivers
+          if [ -d "kernelsu" ]; then
+            echo "Linking kernelsu to drivers..."
+            ln -sf ../kernelsu/kernel drivers/kernelsu
+          fi
+
+          # 强制在 Makefile 层面激活编译目标
+          grep -q "obj-\$(CONFIG_KSU) += kernelsu/" drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+          
+          # 强制注入 Kconfig，防止编译系统跳过该目录
+          grep -q "source \"drivers/kernelsu/Kconfig\"" drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+
+          # 如果使用了 SUSFS，强制内核对象为必选，防止符号链接失败
+          if [ "${{ env.SUSFS_ENABLE }}" == "true" ]; then
+            echo "Ensuring SUSFS symbols are linked..."
+            # 这一步是为了防止 CONFIG_KSU 未被正确设为 y 导致跳过编译
+            sed -i 's/obj-$(CONFIG_KSU)/obj-y/g' drivers/kernelsu/Makefile 2>/dev/null || true
+          fi
 
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
