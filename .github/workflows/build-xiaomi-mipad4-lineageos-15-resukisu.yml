@@ -28,12 +28,12 @@ env:
   DEFCONFIG_ORIGIN_IMAGE: ""
   DEFCONFIG_FROM_BOOT: false
 
-  KERNELSU_SOURCE : "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh"
-  KERNELSU_BRANCH : "main"
-  KERNELSU_NAME : "ReSukiSU"
+  KERNELSU_SOURCE : "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh"
+  KERNELSU_BRANCH : "susfs-main"
+  KERNELSU_NAME : "SukiSU"
 
   KERNELSU_AUTO_GET : "true"
-  KERNELSU_AUTO_FORK : "resukisu"        # 根据示例，resukisu 是有效值
+  KERNELSU_AUTO_FORK : "sukisu"        # 根据示例，resukisu 是有效值
   KERNELSU_METHOD: "shell"
 
   SUSFS_ENABLE : true
