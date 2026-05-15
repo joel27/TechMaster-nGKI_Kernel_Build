@@ -9,7 +9,7 @@ env:
   DEVICE_NAME : "xiaomi_12_lite"
   DEVICE_CODENAME : "taoyao"
 
-  CUSTOM_CMDS : "CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu-"
+  CUSTOM_CMDS : "CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- TARGET_PRODUCT=taoyao"
   EXTRA_CMDS : "LLVM=1 LLVM_IAS=1"
 
   KERNEL_SOURCE : "https://github.com/cyberc3dr/android_kernel_xiaomi_sm8350.git"
@@ -43,7 +43,7 @@ env:
 
   BOOT_SOURCE : ""
 
-  HAVE_NO_DTBO : true
+  HAVE_NO_DTBO : false
   HAVE_NO_DTBO_TOOL : false
 
   ROM_TEXT : "lineageos_23.0"
