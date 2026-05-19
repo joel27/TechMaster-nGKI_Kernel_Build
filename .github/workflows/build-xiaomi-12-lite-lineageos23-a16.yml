@@ -138,12 +138,11 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/device_kernel
           
-          wget https://raw.githubusercontent.com/LineageOS/android_system_libufdt/lineage-20.0/utils/src/mkdtboimg.py -O mkdtboimg.py
+          wget https://raw.githubusercontent.com/LineageOS/android_system_libufdt/lineage-18.1/utils/src/mkdtboimg.py -O mkdtboimg.py
           chmod +x mkdtboimg.py
           
           echo "Building dtbo.img from compiled .dtbo files..."
           
-          # Находим все .dtbo файлы и упаковываем их. Для QGKI они обычно лежат в dts/vendor/qcom
           DTBO_FILES=$(find out/arch/arm64/boot/dts -name "*.dtbo")
           
           if [ -z "$DTBO_FILES" ]; then
