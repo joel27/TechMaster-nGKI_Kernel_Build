@@ -134,25 +134,6 @@ jobs:
       - name: 🚀 Build Process
         uses: ./.github/workflows/build-process
 
-      - name: 📦 Build dtbo.img
-        run: |
-          cd $GITHUB_WORKSPACE/device_kernel
-          
-          wget https://raw.githubusercontent.com/LineageOS/android_system_libufdt/lineage-18.1/utils/src/mkdtboimg.py -O mkdtboimg.py
-          chmod +x mkdtboimg.py
-          
-          echo "Building dtbo.img from compiled .dtbo files..."
-          
-          DTBO_FILES=$(find out/arch/arm64/boot/dts -name "*.dtbo")
-          
-          if [ -z "$DTBO_FILES" ]; then
-            echo "Error: .dtbo files not found. Make sure that kernel builds it."
-            exit 1
-          fi
-          
-          python3 mkdtboimg.py create out/arch/arm64/boot/dtbo.img $DTBO_FILES
-          echo "✅ dtbo.img successfully created: out/arch/arm64/boot/dtbo.img"  
-
       - name: 🔩 Pack Process
         uses: ./.github/workflows/pack-process
 
