@@ -12,8 +12,8 @@ env:
   CUSTOM_CMDS : "CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- TARGET_PRODUCT=taoyao"
   EXTRA_CMDS : "LLVM=1 LLVM_IAS=1"
 
-  KERNEL_SOURCE : "https://github.com/cyberc3dr/kernel_xiaomi_taoyao.git"
-  KERNEL_BRANCH : "bka"
+  KERNEL_SOURCE : "https://github.com/cyberc3dr/android_kernel_ximi_taoyao.git"
+  KERNEL_BRANCH : "ximi-a16"
 
   CLANG_SOURCE : "https://github.com/cyberc3dr/clang_mirror/releases/download/clang-r383902b1/clang-r383902b1.tar.gz"
   CLANG_BRANCH : ""
@@ -25,7 +25,7 @@ env:
   GCC_32_BRANCH : "android12L-release"
 
   DEFCONFIG_SOURCE: ""
-  DEFCONFIG_NAME : "vendor/taoyao-qgki_defconfig"
+  DEFCONFIG_NAME : "vendor/lahaina-qgki_defconfig"
   DEFCONFIG_ORIGIN_IMAGE: ""
   DEFCONFIG_FROM_BOOT: false
 
