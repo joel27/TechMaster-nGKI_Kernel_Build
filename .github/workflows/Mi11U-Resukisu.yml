@@ -30,8 +30,8 @@ env:
   DEFCONFIG_ORIGIN_IMAGE: ""
   DEFCONFIG_FROM_BOOT: false
 
-  KERNELSU_SOURCE : ""
-  KERNELSU_BRANCH : ""
+  KERNELSU_SOURCE : "https://github.com/joel27/ReSukiSU"
+  KERNELSU_BRANCH : "main"
 
   KERNELSU_AUTO_GET : "true"
   KERNELSU_AUTO_FORK : "resukisu"
@@ -64,8 +64,8 @@ env:
   HOOK_METHOD: "syscall"
   KERNEL_PATCH: "false"
 
-  KPM_ENABLE: "true"
-  KPM_INLINE: "true"
+  KPM_ENABLE: "false"
+  KPM_INLINE: "false"
   KPM_KPATCH_NEXT: "false"
   KPM_PATCH_SOURCE: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
 
@@ -79,7 +79,7 @@ env:
   BUILD_DEBUGGER: "false"
   SKIP_PATCH: "false"
   BUILD_OTHER_CONFIG: "false"
-  MERGE_CONFIG_FILES: "vendor/star_QGKI.config,vendor/xiaomi_QGKI.config"
+  MERGE_CONFIG_FILES: "vendor/star_QGKI.config,vendor/xiaomi_QGKI.config,vendor/debugfs.config"
   FREE_MORE_SPACE: "false"
 
 jobs:
