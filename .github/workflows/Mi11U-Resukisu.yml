@@ -30,11 +30,11 @@ env:
   DEFCONFIG_ORIGIN_IMAGE: ""
   DEFCONFIG_FROM_BOOT: false
 
-  KERNELSU_SOURCE : "https://github.com/joel27/ReSukiSU"
-  KERNELSU_BRANCH : "main"
+  KERNELSU_SOURCE : ""
+  KERNELSU_BRANCH : ""
 
-  KERNELSU_AUTO_GET : "false"
-  KERNELSU_AUTO_FORK : ""
+  KERNELSU_AUTO_GET : "true"
+  KERNELSU_AUTO_FORK : "resukisu"
 
   SUSFS_ENABLE : true
   SUSFS_FIXED : true
@@ -79,7 +79,7 @@ env:
   BUILD_DEBUGGER: "false"
   SKIP_PATCH: "false"
   BUILD_OTHER_CONFIG: "false"
-  MERGE_CONFIG_FILES: "vendor/star_QGKI.config,vendor/xiaomi_QGKI.config,vendor/debugfs.config"
+  MERGE_CONFIG_FILES: "vendor/star_QGKI.config,vendor/xiaomi_QGKI.config"
   FREE_MORE_SPACE: "false"
 
 jobs:
