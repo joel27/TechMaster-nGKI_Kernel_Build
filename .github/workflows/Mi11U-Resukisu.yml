@@ -45,7 +45,7 @@ env:
   BOOT_SOURCE : ""
   NEED_DTBO : false
   NEED_SAFE_DTBO : false
-  ROM_TEXT : "Kernel-ReSukiSU"
+  ROM_TEXT : "MultiSU"
 
   PYTHON_VERSION: "3"
   PACK_METHOD: "Anykernel3"
@@ -191,7 +191,7 @@ jobs:
           # =========================================================
           # ¡AQUÍ TAMBIÉN APROVECHAMOS PARA DEJAR EL NOMBRE FIJO DE TU ZIP!
           # =========================================================
-          FINAL_ZIP="Star-Kernel-ReSukiSU-TechMaster.zip"
+          FINAL_ZIP="Star-Kernel-MultiSU-TechMaster.zip"
           cp -fp "${TMP_DIR}/package.zip" "${FINAL_ZIP}"
           echo "PACK_NAME=${FINAL_ZIP}" >> "${GITHUB_ENV}"
           echo "✅ Zip generado: ${FINAL_ZIP}"
