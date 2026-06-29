@@ -26,7 +26,7 @@ env:
   GCC_32_BRANCH : "android12L-release"
 
   DEFCONFIG_SOURCE: ""
-  DEFCONFIG_NAME : "vendor/star1_defconfig"
+  DEFCONFIG_NAME : "vendor/star2_defconfig"
   DEFCONFIG_ORIGIN_IMAGE: ""
   DEFCONFIG_FROM_BOOT: false
 
@@ -191,7 +191,7 @@ jobs:
           # =========================================================
           # ¡AQUÍ TAMBIÉN APROVECHAMOS PARA DEJAR EL NOMBRE FIJO DE TU ZIP!
           # =========================================================
-          FINAL_ZIP="Star-Kernel-ReSukiSU-TechMaster.zip"
+          FINAL_ZIP="Kernel-MultiSU-TechMaster.zip"
           cp -fp "${TMP_DIR}/package.zip" "${FINAL_ZIP}"
           echo "PACK_NAME=${FINAL_ZIP}" >> "${GITHUB_ENV}"
           echo "✅ Zip generado: ${FINAL_ZIP}"
