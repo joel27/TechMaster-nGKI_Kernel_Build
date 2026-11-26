@@ -44,6 +44,10 @@ on:
         description: "Mover KernelSU (BakaSU) al último commit de su rama principal (si no, el commit fijado)"
         type: boolean
         default: true
+      ksu_ref:
+        description: "Commit, tag o rama exacta de KernelSU (BakaSU) a compilar; si se rellena, manda sobre ksu_latest"
+        type: string
+        default: ""
       nomount:
         description: "Integrar NoMount (setup.sh de maxsteeel/nomount)"
         type: boolean
@@ -60,6 +64,18 @@ on:
         description: "Generar headers UAPI antes de compilar (para el preinit de BakaSU)"
         type: boolean
         default: true
+      fgetpriority:
+        description: "Aplicar el parche fgetpriority"
+        type: boolean
+        default: true
+      vpnhide:
+        description: "Aplicar el parche VPNHide"
+        type: boolean
+        default: true
+      variant_label:
+        description: "Sufijo para los nombres de zip y artifact (lo usa el workflow de release, p. ej. -NoMount)"
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       kernel_ref:
@@ -90,6 +106,10 @@ on:
         description: "Mover KernelSU (BakaSU) al último commit de su rama principal (si no, el commit fijado)"
         type: boolean
         default: true
+      ksu_ref:
+        description: "Commit, tag o rama exacta de KernelSU (BakaSU) a compilar; si se rellena, manda sobre ksu_latest"
+        type: string
+        default: ""
       nomount:
         description: "Integrar NoMount (setup.sh de maxsteeel/nomount)"
         type: boolean
@@ -106,6 +126,18 @@ on:
         description: "Generar headers UAPI antes de compilar (para el preinit de BakaSU)"
         type: boolean
         default: true
+      fgetpriority:
+        description: "Aplicar el parche fgetpriority"
+        type: boolean
+        default: true
+      vpnhide:
+        description: "Aplicar el parche VPNHide"
+        type: boolean
+        default: true
+      variant_label:
+        description: "Sufijo para los nombres de zip y artifact (lo usa el workflow de release, p. ej. -NoMount)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -129,10 +161,12 @@ env:
   BUILD_OTHER_CONFIG: "${{ inputs.merge_qgki }}"
   LITE_BUILD: "${{ inputs.lite_build }}"
   KSU_LATEST: "${{ inputs.ksu_latest }}"
+  KSU_REF: "${{ inputs.ksu_ref }}"
   NOMOUNT_ENABLE: "${{ inputs.nomount }}"
   NOMOUNT_REF: "${{ inputs.nomount_ref }}"
   NOMOUNT_REQUIRED: "${{ inputs.nomount_required }}"
   HEADERS_PREINIT: "${{ inputs.headers_preinit }}"
+  VARIANT_LABEL: "${{ inputs.variant_label }}"
   SUSFS_ENABLE: "${{ inputs.root_mode == 'KSU-Susfs' }}"
 
   # ── Toolchain ───────────────────────────────────────────────────────
@@ -203,8 +237,8 @@ env:
   DROIDSPACES_ENABLE: "false"
   BASEBAND_GUARD_ENABLE: "false"
   BASEBAND_GUARD_BOOT: "false"
-  FGETPRIORITY_ENABLE: "true"
-  VPNHIDE_ENABLE: "true"
+  FGETPRIORITY_ENABLE: "${{ inputs.fgetpriority }}"
+  VPNHIDE_ENABLE: "${{ inputs.vpnhide }}"
   STOCK_CONFIG_PATCH: "false"
 
   KPM_ENABLE: "false"
@@ -419,7 +453,11 @@ jobs:
               # Historial completo y tags SIEMPRE: BakaSU calcula su versión con git (tag + nº de commits).
               git -C "$KSU_TOP" fetch --unshallow --tags origin 2>/dev/null || git -C "$KSU_TOP" fetch --tags origin
               echo "versión por git describe: $(git -C "$KSU_TOP" describe --tags 2>/dev/null || echo n/d)"
-              if [ "$KSU_LATEST" = "true" ]; then
+              if [ -n "$KSU_REF" ]; then
+                git -C "$KSU_TOP" checkout -q "$KSU_REF"
+                new=$(git -C "$KSU_TOP" rev-parse --short=8 HEAD)
+                echo "KernelSU fijado con ksu_ref=$KSU_REF: $old -> $new"
+              elif [ "$KSU_LATEST" = "true" ]; then
                 git -C "$KSU_TOP" fetch origin HEAD
                 git -C "$KSU_TOP" checkout -q FETCH_HEAD
                 new=$(git -C "$KSU_TOP" rev-parse --short=8 HEAD)
@@ -999,7 +1037,7 @@ jobs:
             )
             echo "--- Fin autoprueba ---"
             cd "${AK3_DIR}"
-            ZIP="${ZIP_PREFIX}-${TAG}-$(date -u +%Y%m%d%H%M%S).zip"
+            ZIP="${ZIP_PREFIX}-${TAG}${VARIANT_LABEL}-$(date -u +%Y%m%d%H%M%S).zip"
             7za a -tzip -mx9 -mmt=on "$GITHUB_WORKSPACE/$ZIP" ./* >/dev/null
             cd "$GITHUB_WORKSPACE"
             echo "ZIP_NAME=$ZIP" >> "$GITHUB_ENV"
@@ -1011,7 +1049,7 @@ jobs:
         if: env.PACK_METHOD == 'AnyKernel3'
         uses: actions/upload-artifact@v7
         with:
-          name: Star-Kernel-HyperOS-Tech
+          name: Star-Kernel-HyperOS-Tech${{ inputs.variant_label }}
           path: ${{ env.ZIP_NAME }}
           compression-level: 0
           if-no-files-found: error
@@ -1158,14 +1196,14 @@ jobs:
             echo '```'
             head -n 90 "$R"
             echo '```'
-            echo "Informe completo en el artifact **Star-Kernel-HyperOS-Report-$GITHUB_RUN_NUMBER**."
+            echo "Informe completo en el artifact **Star-Kernel-HyperOS-Report-$GITHUB_RUN_NUMBER${VARIANT_LABEL}**."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 📤 Subir informe y logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: Star-Kernel-HyperOS-Report-${{ github.run_number }}
+          name: Star-Kernel-HyperOS-Report-${{ github.run_number }}${{ inputs.variant_label }}
           path: ${{ env.LOG_DIR }}
           retention-days: 14
           if-no-files-found: warn
