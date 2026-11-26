@@ -2,7 +2,61 @@ name: Xiaomi 11U — Resukisu
 
 on:
   workflow_call:
+    inputs:
+      root_mode:
+        description: "ksu-susfs (KernelSU + SUSFS) / ksu (KernelSU sin SUSFS) / vnl (sin root)"
+        type: string
+        default: "ksu-susfs"
+      nomount:
+        description: "Integrar NoMount"
+        type: boolean
+        default: true
+      nomount_ref:
+        description: "Tag, rama o commit de NoMount (vacío = el que fije la acción patch-nomount)"
+        type: string
+        default: ""
+      fgetpriority:
+        description: "Aplicar el parche fgetpriority"
+        type: boolean
+        default: true
+      vpnhide:
+        description: "Aplicar el parche VPNHide"
+        type: boolean
+        default: true
+      variant_label:
+        description: "Sufijo para los nombres de zip y artifact (lo usa el workflow de release)"
+        type: string
+        default: ""
   workflow_dispatch:
+    inputs:
+      root_mode:
+        description: "Tipo de kernel: ksu-susfs (KernelSU + SUSFS) / ksu (KernelSU sin SUSFS) / vnl (sin root)"
+        type: choice
+        options:
+          - ksu-susfs
+          - ksu
+          - vnl
+        default: ksu-susfs
+      nomount:
+        description: "Integrar NoMount"
+        type: boolean
+        default: true
+      nomount_ref:
+        description: "Tag, rama o commit de NoMount (vacío = el que fije la acción patch-nomount)"
+        type: string
+        default: ""
+      fgetpriority:
+        description: "Aplicar el parche fgetpriority"
+        type: boolean
+        default: true
+      vpnhide:
+        description: "Aplicar el parche VPNHide"
+        type: boolean
+        default: true
+      variant_label:
+        description: "Sufijo para los nombres de zip y artifact (lo usa el workflow de release)"
+        type: string
+        default: ""
 
 env:
   # Device env
@@ -33,15 +87,18 @@ env:
   KERNELSU_SOURCE : ""
   KERNELSU_BRANCH : ""
 
-  KERNELSU_AUTO_GET : "true"
+  KERNELSU_AUTO_GET : "${{ inputs.root_mode != 'vnl' }}"
   KERNELSU_AUTO_FORK : "bakasu"
 
-  SUSFS_ENABLE : true
+  SUSFS_ENABLE : "${{ inputs.root_mode == 'ksu-susfs' }}"
   SUSFS_FIXED : true
 
-  NOMOUNT_ENABLE: "true"
-  FGETPRIORITY_ENABLE: "true"   # ocultar getpriority (ver nota en el informe: comprobar que quedó en el .config)
-  VPNHIDE_ENABLE: "true"        # ocultar el estado de VPN
+  ROOT_MODE: "${{ inputs.root_mode }}"
+  VARIANT_LABEL: "${{ inputs.variant_label }}"
+  NOMOUNT_ENABLE: "${{ inputs.nomount }}"
+  NOMOUNT_REF: "${{ inputs.nomount_ref }}"
+  FGETPRIORITY_ENABLE: "${{ inputs.fgetpriority }}"   # ocultar getpriority (ver nota en el informe: comprobar que quedó en el .config)
+  VPNHIDE_ENABLE: "${{ inputs.vpnhide }}"        # ocultar el estado de VPN
 
   AK3_SOURCE : "https://github.com/osm0sis/AnyKernel3.git"
   AK3_BRANCH : "master"
@@ -69,7 +126,7 @@ env:
   HOOK_METHOD: "syscall"
   KERNEL_PATCH: "false"
 
-  KPM_ENABLE: "true"
+  KPM_ENABLE: "${{ inputs.root_mode != 'vnl' }}"
   KPM_INLINE: "false"
   KPM_KPATCH_NEXT: "true"
   KPM_PATCH_SOURCE: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
@@ -158,9 +215,58 @@ jobs:
         id: stock
         uses: ./.github/workflows/patch-stock-config
 
+      # vnl / ksu: se fuerza en el defconfig lo que las acciones compartidas pudieran haber dejado activado
+      - name: 🎚️ Aplicar modo de root (vnl / ksu / ksu-susfs)
+        id: rootmode
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/device_kernel"
+          DEF="arch/arm64/configs/${DEFCONFIG_NAME}"
+          case "$ROOT_MODE" in
+            vnl)       printf '%s\n' '# CONFIG_KSU is not set' '# CONFIG_KSU_SUSFS is not set' >> "$DEF" ;;
+            ksu)       printf '%s\n' '# CONFIG_KSU_SUSFS is not set' >> "$DEF" ;;
+            ksu-susfs) ;;
+            *) echo "::error::root_mode no válido: '$ROOT_MODE' (usa ksu-susfs, ksu o vnl)"; exit 1 ;;
+          esac
+          echo "Modo de root: $ROOT_MODE"
+
       - name: 🚀 Build Process
         id: build
         uses: ./.github/workflows/build-process
+
+      # Si la variante pedida no coincide con el .config final, el job FALLA (así no se publica un zip mal etiquetado)
+      - name: 🔎 Verificar que la variante coincide con el .config
+        id: verify
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/device_kernel"
+          CFG="out/.config"
+          [ -f "$CFG" ] || { echo "::error::No existe $CFG: no se compiló"; exit 1; }
+          ksu=0;   if grep -qE '^CONFIG_KSU=[ym]$' "$CFG"; then ksu=1; fi
+          susfs=0; if grep -q '^CONFIG_KSU_SUSFS=y$' "$CFG"; then susfs=1; fi
+          bad=""
+          case "$ROOT_MODE" in
+            vnl)       [ "$ksu" = 0 ] || bad="vnl pero KernelSU sigue activo en el .config" ;;
+            ksu)       { [ "$ksu" = 1 ] && [ "$susfs" = 0 ]; } || bad="ksu requiere KSU=y y SUSFS desactivado (ksu=$ksu susfs=$susfs)" ;;
+            ksu-susfs) { [ "$ksu" = 1 ] && [ "$susfs" = 1 ]; } || bad="ksu-susfs requiere KSU=y y KSU_SUSFS=y (ksu=$ksu susfs=$susfs)" ;;
+          esac
+          # Opciones pedidas: si faltan en el .config es un error; si sobran, solo un aviso
+          for pair in "NOMOUNT:$NOMOUNT_ENABLE" "FGETPRIORITY:$FGETPRIORITY_ENABLE" "VPNHIDE:$VPNHIDE_ENABLE"; do
+            sym=${pair%%:*}; want=${pair#*:}
+            have=0; if grep -qE "^CONFIG_${sym}=[ym]$" "$CFG"; then have=1; fi
+            if [ "$want" = "true" ] && [ "$have" = 0 ]; then bad="${bad:+$bad; }$sym pedido pero NO está en el .config"; fi
+            if [ "$want" != "true" ] && [ "$have" = 1 ]; then echo "::warning::$sym no se pidió pero aparece en el .config"; fi
+          done
+          # ¿NoMount quedó en la versión pedida? (solo aviso: depende de la acción patch-nomount)
+          if [ "$NOMOUNT_ENABLE" = "true" ] && [ -n "${NOMOUNT_REF:-}" ] && [ -d NoMount ]; then
+            want=$(git -C NoMount rev-parse --verify -q "${NOMOUNT_REF}^{commit}" || true)
+            have=$(git -C NoMount rev-parse HEAD 2>/dev/null || true)
+            if [ -z "$want" ] || [ "$want" != "$have" ]; then
+              echo "::warning::NoMount no está en la versión pedida ($NOMOUNT_REF): la acción patch-nomount no respeta NOMOUNT_REF"
+            fi
+          fi
+          echo "Variante: root=$ROOT_MODE nomount=$NOMOUNT_ENABLE fgetpriority=$FGETPRIORITY_ENABLE vpnhide=$VPNHIDE_ENABLE | ksu=$ksu susfs=$susfs"
+          if [ -n "$bad" ]; then echo "::error::$bad"; exit 1; fi
 
       - name: 📦 Package AnyKernel3 Flash Zip
         id: pack
@@ -211,7 +317,9 @@ jobs:
           7za a -tzip -mx9 -mmt=on package.zip ./* >/dev/null
           cd "${GITHUB_WORKSPACE}"
 
-          FINAL_ZIP="Kernel-Resukisu-TechMaster-11U-${TIME}.zip"
+          ZIP_BASE="Kernel-Resukisu-TechMaster-11U"
+          if [[ "${ROOT_MODE}" == "vnl" ]]; then ZIP_BASE="Kernel-Vanilla-TechMaster-11U"; fi
+          FINAL_ZIP="${ZIP_BASE}${VARIANT_LABEL}-${TIME}.zip"
           cp -fp "${TMP_DIR}/package.zip" "${FINAL_ZIP}"
           echo "PACK_NAME=${FINAL_ZIP}" >> "${GITHUB_ENV}"
           echo "✅ Zip generado: ${FINAL_ZIP}"
@@ -222,7 +330,7 @@ jobs:
         uses: actions/upload-artifact@v7
         if: env.PACK_METHOD == 'AnyKernel3'
         with:
-          name: Star-Kernel-Resukisu-Tech
+          name: Star-Kernel-Resukisu-Tech${{ inputs.variant_label }}
           path: ${{ env.PACK_NAME }}
           compression-level: 0
     # --- INFORME DE COMPILACIÓN: se genera SIEMPRE (éxito, fallo o cancelación) ---
@@ -245,6 +353,8 @@ jobs:
           O_FGETPRIORITY: ${{ steps.fgetpriority.outcome }}
           O_VPNHIDE: ${{ steps.vpnhide.outcome }}
           O_STOCK: ${{ steps.stock.outcome }}
+          O_ROOTMODE: ${{ steps.rootmode.outcome }}
+          O_VERIFY: ${{ steps.verify.outcome }}
           O_BUILD: ${{ steps.build.outcome }}
           O_PACK: ${{ steps.pack.outcome }}
           O_UPLOAD: ${{ steps.upload.outcome }}
@@ -272,6 +382,7 @@ jobs:
             echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID (intento $GITHUB_RUN_ATTEMPT)"
             echo "Kernel: $KERNEL_SOURCE @ $KERNEL_BRANCH | commit: $(git -C "$K" log -1 --format='%h %s' 2>/dev/null || echo n/d)"
             echo "Defconfig: $DEFCONFIG_NAME | merge de configs: $BUILD_OTHER_CONFIG"
+            echo "Variante: root=$ROOT_MODE nomount=$NOMOUNT_ENABLE fgetpriority=$FGETPRIORITY_ENABLE vpnhide=$VPNHIDE_ENABLE"
             echo "Versión del kernel compilado: ${REL:-(no se llegó a generar)}"
             case "$REL" in *-dirty*) echo "AVISO: la versión lleva -dirty";; esac
             case "$REL" in *+) echo "AVISO: la versión termina en + (el árbol quedó modificado por los parches)";; esac
@@ -299,7 +410,7 @@ jobs:
             echo
             echo "--- Resultado por paso ---"
             culprit=""
-            for s in CHECKOUT ENV READY SUSFS NOKPROBE EXTRA REKERNEL DROID BASEBAND NOMOUNT FGETPRIORITY VPNHIDE STOCK BUILD PACK UPLOAD; do
+            for s in CHECKOUT ENV READY SUSFS NOKPROBE EXTRA REKERNEL DROID BASEBAND NOMOUNT FGETPRIORITY VPNHIDE STOCK ROOTMODE BUILD VERIFY PACK UPLOAD; do
               v="O_$s"
               printf '%-9s %s\n' "$s" "${!v}"
               if [ -z "$culprit" ] && [ "${!v}" = "failure" ]; then culprit="$s"; fi
@@ -367,14 +478,14 @@ jobs:
             echo '```'
             head -n 90 "$R"
             echo '```'
-            echo "Informe completo en el artifact **Star-Kernel-Resukisu-Report-$GITHUB_RUN_NUMBER**."
+            echo "Informe completo en el artifact **Star-Kernel-Resukisu-Report-$GITHUB_RUN_NUMBER${VARIANT_LABEL}**."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 📤 Subir informe de compilación
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: Star-Kernel-Resukisu-Report-${{ github.run_number }}
+          name: Star-Kernel-Resukisu-Report-${{ github.run_number }}${{ inputs.variant_label }}
           path: build-report.txt
           retention-days: 14
           if-no-files-found: warn
@@ -383,6 +494,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: Kernel-Compilation-Full-Log
+          name: Kernel-Compilation-Full-Log${{ inputs.variant_label }}
           path: device_kernel/build_full.log
           if-no-files-found: ignore

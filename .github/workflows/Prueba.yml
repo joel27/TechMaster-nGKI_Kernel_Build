@@ -60,6 +60,18 @@ on:
         description: "Generar headers UAPI antes de compilar (para el preinit de BakaSU)"
         type: boolean
         default: true
+      fgetpriority:
+        description: "Aplicar el parche fgetpriority"
+        type: boolean
+        default: true
+      vpnhide:
+        description: "Aplicar el parche VPNHide"
+        type: boolean
+        default: true
+      variant_label:
+        description: "Sufijo para los nombres de zip y artifact (lo usa el workflow de release, p. ej. -NoMount)"
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       kernel_ref:
@@ -106,6 +118,18 @@ on:
         description: "Generar headers UAPI antes de compilar (para el preinit de BakaSU)"
         type: boolean
         default: true
+      fgetpriority:
+        description: "Aplicar el parche fgetpriority"
+        type: boolean
+        default: true
+      vpnhide:
+        description: "Aplicar el parche VPNHide"
+        type: boolean
+        default: true
+      variant_label:
+        description: "Sufijo para los nombres de zip y artifact (lo usa el workflow de release, p. ej. -NoMount)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -133,6 +157,7 @@ env:
   NOMOUNT_REF: "${{ inputs.nomount_ref }}"
   NOMOUNT_REQUIRED: "${{ inputs.nomount_required }}"
   HEADERS_PREINIT: "${{ inputs.headers_preinit }}"
+  VARIANT_LABEL: "${{ inputs.variant_label }}"
   SUSFS_ENABLE: "${{ inputs.root_mode == 'KSU-Susfs' }}"
 
   # ── Toolchain ───────────────────────────────────────────────────────
@@ -203,8 +228,8 @@ env:
   DROIDSPACES_ENABLE: "false"
   BASEBAND_GUARD_ENABLE: "false"
   BASEBAND_GUARD_BOOT: "false"
-  FGETPRIORITY_ENABLE: "true"
-  VPNHIDE_ENABLE: "true"
+  FGETPRIORITY_ENABLE: "${{ inputs.fgetpriority }}"
+  VPNHIDE_ENABLE: "${{ inputs.vpnhide }}"
   STOCK_CONFIG_PATCH: "false"
 
   KPM_ENABLE: "false"
@@ -999,7 +1024,7 @@ jobs:
             )
             echo "--- Fin autoprueba ---"
             cd "${AK3_DIR}"
-            ZIP="${ZIP_PREFIX}-${TAG}-$(date -u +%Y%m%d%H%M%S).zip"
+            ZIP="${ZIP_PREFIX}-${TAG}${VARIANT_LABEL}-$(date -u +%Y%m%d%H%M%S).zip"
             7za a -tzip -mx9 -mmt=on "$GITHUB_WORKSPACE/$ZIP" ./* >/dev/null
             cd "$GITHUB_WORKSPACE"
             echo "ZIP_NAME=$ZIP" >> "$GITHUB_ENV"
@@ -1011,7 +1036,7 @@ jobs:
         if: env.PACK_METHOD == 'AnyKernel3'
         uses: actions/upload-artifact@v7
         with:
-          name: Star-Kernel-HyperOS-Tech
+          name: Star-Kernel-HyperOS-Tech${{ inputs.variant_label }}
           path: ${{ env.ZIP_NAME }}
           compression-level: 0
           if-no-files-found: error
@@ -1158,14 +1183,14 @@ jobs:
             echo '```'
             head -n 90 "$R"
             echo '```'
-            echo "Informe completo en el artifact **Star-Kernel-HyperOS-Report-$GITHUB_RUN_NUMBER**."
+            echo "Informe completo en el artifact **Star-Kernel-HyperOS-Report-$GITHUB_RUN_NUMBER${VARIANT_LABEL}**."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 📤 Subir informe y logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: Star-Kernel-HyperOS-Report-${{ github.run_number }}
+          name: Star-Kernel-HyperOS-Report-${{ github.run_number }}${{ inputs.variant_label }}
           path: ${{ env.LOG_DIR }}
           retention-days: 14
           if-no-files-found: warn

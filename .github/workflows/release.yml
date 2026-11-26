@@ -1,0 +1,176 @@
+name: Release — todas las variantes
+
+run-name: "Release ${{ inputs.tag || 'auto' }} · ${{ inputs.kernel_ref }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag del release (vacío = release-AAAAMMDD-HHMM)"
+        type: string
+        default: ""
+      kernel_ref:
+        description: "Rama o tag del repo HyperOS (no aplica al Xiaomi MIUI, que usa su rama fija)"
+        type: string
+        default: "HOS4-A17"
+      nomount_ref:
+        description: "Commit, tag o rama de NoMount para TODAS las variantes con NoMount"
+        type: string
+        default: "42d15fd"
+      prerelease:
+        description: "Marcar como pre-release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # ---------------------------------------------------------------------
+  # HyperOS híbrido (Prueba.yml): 3 modos de root x NoMount sí/no x VPNHide+fgetpriority sí/no = 12 builds
+  # ---------------------------------------------------------------------
+  hybrid:
+    name: Híbrido · ${{ matrix.root_mode }}${{ matrix.nomount && ' · NoMount' || '' }}${{ matrix.privacy && ' · VPNHide+fgetpriority' || '' }}
+    strategy:
+      fail-fast: false          # que un fallo no cancele las demás variantes
+      matrix:
+        root_mode: [Vanilla, KSU, KSU-Susfs]
+        nomount: [true, false]
+        privacy: [true, false]  # true = VPNHide + fgetpriority juntos
+    uses: ./.github/workflows/Prueba.yml
+    with:
+      kernel_ref: ${{ inputs.kernel_ref }}
+      root_mode: ${{ matrix.root_mode }}
+      nomount: ${{ matrix.nomount }}
+      nomount_ref: ${{ inputs.nomount_ref }}
+      # Si NoMount se pidió y no se aplica limpio, la variante FALLA (no se publica un zip "con NoMount" que no lo lleva)
+      nomount_required: ${{ matrix.nomount }}
+      fgetpriority: ${{ matrix.privacy }}
+      vpnhide: ${{ matrix.privacy }}
+      variant_label: "-hybrid${{ matrix.nomount && '-NoMount' || '' }}${{ matrix.privacy && '-VPNHide-fgetpriority' || '' }}"
+
+  # ---------------------------------------------------------------------
+  # HyperOS modern (hyperos.yml): las mismas 12 variantes
+  # ---------------------------------------------------------------------
+  modern:
+    name: Modern · ${{ matrix.root_mode }}${{ matrix.nomount && ' · NoMount' || '' }}${{ matrix.privacy && ' · VPNHide+fgetpriority' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        root_mode: [Vanilla, KSU, KSU-Susfs]
+        nomount: [true, false]
+        privacy: [true, false]
+    uses: ./.github/workflows/hyperos.yml
+    with:
+      kernel_ref: ${{ inputs.kernel_ref }}
+      root_mode: ${{ matrix.root_mode }}
+      nomount: ${{ matrix.nomount }}
+      nomount_ref: ${{ inputs.nomount_ref }}
+      nomount_required: ${{ matrix.nomount }}
+      fgetpriority: ${{ matrix.privacy }}
+      vpnhide: ${{ matrix.privacy }}
+      variant_label: "-modern${{ matrix.nomount && '-NoMount' || '' }}${{ matrix.privacy && '-VPNHide-fgetpriority' || '' }}"
+
+  # ---------------------------------------------------------------------
+  # Xiaomi 11U MIUI / Resukisu (xiaomi11-ultra.yml): vnl, ksu, ksu-susfs x NoMount x VPNHide+fgetpriority = 12 builds
+  # ---------------------------------------------------------------------
+  xiaomi:
+    name: Xiaomi MIUI · ${{ matrix.root_mode }}${{ matrix.nomount && ' · NoMount' || '' }}${{ matrix.privacy && ' · VPNHide+fgetpriority' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        root_mode: [vnl, ksu, ksu-susfs]
+        nomount: [true, false]
+        privacy: [true, false]
+    uses: ./.github/workflows/xiaomi11-ultra.yml
+    with:
+      root_mode: ${{ matrix.root_mode }}
+      nomount: ${{ matrix.nomount }}
+      nomount_ref: ${{ inputs.nomount_ref }}
+      fgetpriority: ${{ matrix.privacy }}
+      vpnhide: ${{ matrix.privacy }}
+      variant_label: "-${{ matrix.root_mode }}${{ matrix.nomount && '-NoMount' || '' }}${{ matrix.privacy && '-VPNHide-fgetpriority' || '' }}"
+
+  # ---------------------------------------------------------------------
+  # Publicar: junta los zips de las variantes que sí compilaron y crea el release
+  # ---------------------------------------------------------------------
+  publish:
+    name: Publicar release
+    needs: [hybrid, modern, xiaomi]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      EXPECTED: "36"
+    steps:
+      - name: 📥 Descargar zips (híbrido)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Star-Kernel-HyperOS-Tech*      # artifact de Prueba.yml: solo zips, no informes
+          path: dist/hybrid
+
+      - name: 📥 Descargar zips (modern)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Kernel-HyperOS-TechMaster-11U-*   # hyperos.yml nombra el artifact con el nombre del zip
+          path: dist/modern
+
+      - name: 📥 Descargar zips (Xiaomi MIUI)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Star-Kernel-Resukisu-Tech*        # artifact de xiaomi11-ultra.yml: solo zips
+          path: dist/xiaomi
+
+      - name: 🚀 Crear el release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IN_TAG: ${{ inputs.tag }}
+          IN_REF: ${{ inputs.kernel_ref }}
+          IN_NOMOUNT_REF: ${{ inputs.nomount_ref }}
+          IN_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          TAG="$IN_TAG"
+          [ -n "$TAG" ] || TAG="release-$(date -u +%Y%m%d-%H%M)"
+
+          mkdir -p out
+          find dist -name '*.zip' -exec cp -v {} out/ \;
+          N=$(find out -name '*.zip' | wc -l)
+          if [ "$N" -eq 0 ]; then
+            echo "::error::No hay ningún zip: todas las variantes fallaron"
+            exit 1
+          fi
+          # Dos zips con el mismo nombre se pisarían al copiarlos: lo avisamos
+          D=$(find dist -name '*.zip' | wc -l)
+          [ "$N" -eq "$D" ] || echo "::warning::Hay nombres de zip repetidos: $D encontrados, $N copiados"
+          (cd out && sha256sum *.zip > SHA256SUMS.txt)
+
+          {
+            echo "Kernel Xiaomi 11U (star) · HyperOS · rama \`$IN_REF\`"
+            echo
+            echo "Variantes incluidas: **$N de $EXPECTED**. Las que fallaron no se publican; mira el run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "NoMount fijado a: \`$IN_NOMOUNT_REF\`"
+            echo "Origen de los zips: \`Kernel-HyperOS-*-hybrid-*\` = Prueba.yml · \`Kernel-HyperOS-*-modern-*\` = hyperos.yml · \`Kernel-Resukisu-*\` y \`Kernel-Vanilla-*\` = xiaomi11-ultra.yml (MIUI)."
+            echo
+            echo "| Zip | SHA-256 |"
+            echo "|---|---|"
+            while read -r sum name; do
+              echo "| $name | \`${sum:0:16}…\` |"
+            done < out/SHA256SUMS.txt
+          } > notes.md
+
+          FLAGS=()
+          [ "$IN_PRERELEASE" = "true" ] && FLAGS+=(--prerelease)
+
+          gh release create "$TAG" out/*.zip out/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes-file notes.md \
+            "${FLAGS[@]}"
+          echo "✅ Release $TAG con $N zips"
