@@ -74,11 +74,7 @@ env:
   KPM_KPATCH_NEXT: "false"
   KPM_PATCH_SOURCE: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
 
-  BASEBAND_GUARD_ENABLE: "false"git add .
-
-git commit -m "Update Release and Workflows"
-
-git push origin mainline
+  BASEBAND_GUARD_ENABLE: "false"
   BASEBAND_GUARD_BOOT: "false"
 
   GENERATE_DTB: "false"
