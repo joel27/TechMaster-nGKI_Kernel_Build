@@ -17,6 +17,14 @@ on:
         description: "Commit, tag o rama de NoMount para TODAS las variantes con NoMount"
         type: string
         default: "42d15fd"
+      ksu_latest:
+        description: "HyperOS: mover BakaSU al último commit (false = el commit fijado del repo, reproducible)"
+        type: boolean
+        default: false
+      ksu_ref:
+        description: "HyperOS: commit exacto de BakaSU (vacío = usa ksu_latest). Ej.: 7b65bde0"
+        type: string
+        default: ""
       prerelease:
         description: "Marcar como pre-release"
         type: boolean
@@ -46,6 +54,8 @@ jobs:
       root_mode: ${{ matrix.root_mode }}
       nomount: ${{ matrix.nomount }}
       nomount_ref: ${{ inputs.nomount_ref }}
+      ksu_latest: ${{ inputs.ksu_latest }}
+      ksu_ref: ${{ inputs.ksu_ref }}
       # Si NoMount se pidió y no se aplica limpio, la variante FALLA (no se publica un zip "con NoMount" que no lo lleva)
       nomount_required: ${{ matrix.nomount }}
       fgetpriority: ${{ matrix.privacy }}
@@ -70,6 +80,8 @@ jobs:
       nomount: ${{ matrix.nomount }}
       nomount_ref: ${{ inputs.nomount_ref }}
       nomount_required: ${{ matrix.nomount }}
+      ksu_latest: ${{ inputs.ksu_latest }}
+      ksu_ref: ${{ inputs.ksu_ref }}
       fgetpriority: ${{ matrix.privacy }}
       vpnhide: ${{ matrix.privacy }}
       variant_label: "-modern${{ matrix.nomount && '-NoMount' || '' }}${{ matrix.privacy && '-VPNHide-fgetpriority' || '' }}"
