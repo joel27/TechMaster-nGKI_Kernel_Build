@@ -188,7 +188,7 @@ jobs:
             exit 1
           fi
           if [[ -d "${AK3_DIR}" ]]; then
-            curl -fsSL --retry 3 https://raw.githubusercontent.com/joel27/NonGKI_Kernel_Build_2nd/mainline/Patches/anykernel.sh -o "${AK3_DIR}/anykernel.sh"
+            curl -fsSL --retry 3 https://raw.githubusercontent.com/joel27/TechMaster-nGKI_Kernel_Build/mainline/Patches/anykernel.sh -o "${AK3_DIR}/anykernel.sh"
             chmod +x "${AK3_DIR}/anykernel.sh"
             sed -i \
               -e 's/^name=.*/name="11U-Resukisu"/' \
