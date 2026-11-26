@@ -2,60 +2,6 @@ name: Build Xiaomi11U (HyperOS Modern)
 run-name: "HyperOS star · ${{ inputs.root_mode }} · ${{ inputs.kernel_ref }} · ${{ inputs.defconfig }}"
 
 on:
-  workflow_call:
-    inputs:
-      kernel_ref:
-        description: "Rama o tag del repo HyperOS"
-        type: string
-        default: "HOS4-A17"
-      defconfig:
-        description: "Defconfig (ruta dentro de arch/arm64/configs)"
-        type: string
-        default: "vendor/star_defconfig"
-      root_mode:
-        description: "KSU-Susfs (BakaSU + SUSFS) / KSU (BakaSU sin SUSFS) / Vanilla (sin root)"
-        type: string
-        default: "KSU-Susfs"
-      merge_qgki:
-        description: "Mezclar star_QGKI.config y xiaomi_QGKI.config sobre el defconfig"
-        type: boolean
-        default: false
-      lite_build:
-        description: "Compilar ligero (sin LTO/CFI)"
-        type: boolean
-        default: true
-      ksu_latest:
-        description: "Mover KernelSU (BakaSU) al último commit de su rama principal (si no, el commit fijado)"
-        type: boolean
-        default: true
-      nomount:
-        description: "Integrar NoMount (setup.sh de maxsteeel/nomount)"
-        type: boolean
-        default: true
-      nomount_ref:
-        description: "Tag, rama o commit de NoMount (vacío = último tag)"
-        type: string
-        default: ""
-      nomount_required:
-        description: "Fallar si NoMount no se aplica limpio (si no, se compila sin él)"
-        type: boolean
-        default: false
-      headers_preinit:
-        description: "Generar headers UAPI antes de compilar (para el preinit de BakaSU)"
-        type: boolean
-        default: true
-      fgetpriority:
-        description: "Aplicar el parche fgetpriority"
-        type: boolean
-        default: false
-      vpnhide:
-        description: "Aplicar el parche VPNHide"
-        type: boolean
-        default: false
-      variant_label:
-        description: "Sufijo para los nombres de zip e informe (lo usa el workflow de release, p. ej. -NoMount)"
-        type: string
-        default: ""
   workflow_dispatch:
     inputs:
       kernel_ref:
@@ -102,18 +48,6 @@ on:
         description: "Generar headers UAPI antes de compilar (para el preinit de BakaSU)"
         type: boolean
         default: true
-      fgetpriority:
-        description: "Aplicar el parche fgetpriority"
-        type: boolean
-        default: false
-      vpnhide:
-        description: "Aplicar el parche VPNHide"
-        type: boolean
-        default: false
-      variant_label:
-        description: "Sufijo para los nombres de zip e informe (lo usa el workflow de release, p. ej. -NoMount)"
-        type: string
-        default: ""
 
 permissions:
   contents: read
@@ -125,13 +59,6 @@ env:
   CLANG_URL: "https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz"
   ZIP_PREFIX: "Kernel-HyperOS-TechMaster-11U"
   REQUIRE_KSU: "true"
-
-  # Las acciones compartidas patch-fgetpriority / patch-vpnhide leen estas variables
-  KERNEL_ARCH: arm64
-  DEFCONFIG_NAME: "${{ inputs.defconfig }}"
-  FGETPRIORITY_ENABLE: "${{ inputs.fgetpriority }}"
-  VPNHIDE_ENABLE: "${{ inputs.vpnhide }}"
-  VARIANT_LABEL: "${{ inputs.variant_label }}"
 
   NOMOUNT_SETUP_URL: "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh"
 
@@ -208,11 +135,6 @@ jobs:
         shell: bash
         run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
 
-      # Hace falta para poder usar las acciones locales (./.github/workflows/patch-*)
-      - name: ⏰ Checkout repository
-        id: checkout_self
-        uses: actions/checkout@v6
-
       - name: 📥 Descargar kernel HyperOS
         id: checkout
         uses: actions/checkout@v6
@@ -222,17 +144,6 @@ jobs:
           path: "kernel"
           submodules: recursive
           fetch-depth: 1
-
-      - name: 🧭 Variables del kernel y enlace device_kernel
-        id: kvars
-        shell: bash
-        run: |
-          cd "$GITHUB_WORKSPACE/kernel"
-          KV=$(head -n 3 Makefile | grep -E 'VERSION|PATCHLEVEL' | awk '{print $3}' | paste -sd '.')
-          echo "KERNEL_VERSION=$KV" >> "$GITHUB_ENV"
-          # Las acciones compartidas buscan el kernel en device_kernel; aquí vive en kernel
-          ln -sfn "$GITHUB_WORKSPACE/kernel" "$GITHUB_WORKSPACE/device_kernel"
-          echo "Kernel $KV"
 
       - name: 🔎 Revisar y actualizar KernelSU (BakaSU)
         id: ksu
@@ -366,16 +277,6 @@ jobs:
               echo "NOMOUNT_APPLIED=true" >> "$GITHUB_ENV"
             fi
           } 2>&1 | tee -a "$LOG_DIR/nomount.log"
-
-      - name: ⛔ Patch Kernel of fgetpriority
-        id: fgetpriority
-        if: env.FGETPRIORITY_ENABLE == 'true'
-        uses: ./.github/workflows/patch-fgetpriority
-
-      - name: 🛜 Patch Kernel of VPNHide
-        id: vpnhide
-        if: env.VPNHIDE_ENABLE == 'true'
-        uses: ./.github/workflows/patch-vpnhide
 
       - name: ♻️ Restaurar caché de ccache
         uses: actions/cache/restore@v6
@@ -835,7 +736,7 @@ jobs:
             )
             echo "--- Fin autoprueba ---"
             cd "${AK3_DIR}"
-            ZIP="${ZIP_PREFIX}-${TAG}${VARIANT_LABEL}-$(date -u +%Y%m%d%H%M%S).zip"
+            ZIP="${ZIP_PREFIX}-${TAG}-$(date -u +%Y%m%d%H%M%S).zip"
             7za a -tzip -mx9 -mmt=on "${{ github.workspace }}/$ZIP" ./* >/dev/null
             cd "${{ github.workspace }}"
             echo "ZIP_NAME=$ZIP" >> "$GITHUB_ENV"
@@ -863,8 +764,6 @@ jobs:
           O_SETUP: ${{ steps.setup.outcome }}
           O_NOMOUNT: ${{ steps.nomount.outcome }}
           O_NMCHECK: ${{ steps.nomount_check.outcome }}
-          O_FGETPRIORITY: ${{ steps.fgetpriority.outcome }}
-          O_VPNHIDE: ${{ steps.vpnhide.outcome }}
           O_PREP: ${{ steps.prep.outcome }}
           O_CONFIG: ${{ steps.config.outcome }}
           O_SELINUX: ${{ steps.selinux.outcome }}
@@ -900,13 +799,12 @@ jobs:
               echo "KernelSU: ${KSU_TOP##*/} @ $(git -C "$KSU_TOP" log -1 --format='%h %s' 2>/dev/null)"
             fi
             echo "NoMount integrado: ${NOMOUNT_APPLIED:-no (omitido o no verificado)}$( [ -d kernel/NoMount ] && echo " | $(git -C kernel/NoMount describe --tags --always 2>/dev/null)" )"
-            echo "Parches opcionales: fgetpriority=$FGETPRIORITY_ENABLE vpnhide=$VPNHIDE_ENABLE"
             echo
             echo "--- Resultado por paso ---"
             culprit=""
-            for s in CHECKOUT KSU SETUP NOMOUNT NMCHECK FGETPRIORITY VPNHIDE PREP CONFIG SELINUX HEADERS VERSION BUILD PACK UPLOAD; do
+            for s in CHECKOUT KSU SETUP NOMOUNT NMCHECK PREP CONFIG SELINUX HEADERS VERSION BUILD PACK UPLOAD; do
               v="O_$s"
-              printf '%-12s %s\n' "$s" "${!v}"
+              printf '%-9s %s\n' "$s" "${!v}"
               if [ -z "$culprit" ] && [ "${!v}" = "failure" ]; then culprit="$s"; fi
             done
             [ "$JOB_STATUS" = "success" ] || echo "Primer paso con fallo: ${culprit:-(cancelado o sin determinar)}"
@@ -970,14 +868,14 @@ jobs:
             echo '```'
             head -n 90 "$R"
             echo '```'
-            echo "Informe completo en el artifact **hyperos-informe-$GITHUB_RUN_NUMBER${VARIANT_LABEL}**."
+            echo "Informe completo en el artifact **hyperos-informe-$GITHUB_RUN_NUMBER**."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 📤 Subir informe y logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: hyperos-informe-${{ github.run_number }}${{ inputs.variant_label }}
+          name: hyperos-informe-${{ github.run_number }}
           path: ${{ env.LOG_DIR }}
           retention-days: 14
           if-no-files-found: warn
